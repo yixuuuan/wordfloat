@@ -1,9 +1,11 @@
 name: Release
 
-# 推送 v* 标签时：构建 浮词.app，打包 zip，发布到 Releases
+# 推送到 main 时：读取 macos/Info.plist 的版本号。
+# 这个版本还没有 Release，就构建 浮词.app、打标签 v<版本>、发布 zip。
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,17 +16,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read version
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(python3 -c 'import plistlib;print(plistlib.load(open("macos/Info.plist","rb"))["CFBundleShortVersionString"])')
+          echo "tag=v$v" >> "$GITHUB_OUTPUT"
+          if gh release view "v$v" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "v$v 已发布，跳过。"
+          fi
+
       - name: Build
+        if: steps.ver.outputs.exists != 'true'
         id: build
         run: |
           chmod +x build.sh
           echo "zip=$(./build.sh | tail -1)" >> "$GITHUB_OUTPUT"
 
       - name: Publish
+        if: steps.ver.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
           gh release create "$TAG" "${{ steps.build.outputs.zip }}" \
+            --target "$GITHUB_SHA" \
             --title "浮词 $TAG" \
             --notes-file .github/release-notes.md
