@@ -1,0 +1,52 @@
+#!/bin/bash
+# 浮词 —— app 启动器
+# 找到装好组件的 Python，缺组件就装；已在运行就重启（双击 = 打开或重启）。
+RES="$(cd "$(dirname "$0")/../Resources" && pwd)"
+DATA="$HOME/WordFloat"; mkdir -p "$DATA"
+LOG="$DATA/wordfloat.log"
+MIRROR="https://pypi.tuna.tsinghua.edu.cn/simple"
+
+alert() {  # 标题 正文
+  /usr/bin/osascript -e "display alert \"$1\" message \"$2\" as critical" >/dev/null 2>&1
+}
+
+cands=()
+for p in /Library/Frameworks/Python.framework/Versions/3.*/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+  [ -x "$p" ] && cands+=("$p")
+done
+# 系统自带的 python3 只在已装好开发者工具时才用，避免弹出安装框
+if xcode-select -p >/dev/null 2>&1 && [ -x /usr/bin/python3 ]; then cands+=(/usr/bin/python3); fi
+
+PY=""
+# 上次能用的 Python：直接用，省掉检查组件的一两秒
+CACHE="$DATA/.python"
+if [ -f "$CACHE" ]; then
+  c="$(cat "$CACHE")"
+  [ -x "$c" ] && PY="$c"
+fi
+[ -z "$PY" ] && for p in "${cands[@]}"; do          # 先找已经装好组件的
+  if "$p" -c "import AppKit, PyObjCTools.AppHelper, certifi" >/dev/null 2>&1; then PY="$p"; break; fi
+done
+if [ -z "$PY" ] && [ ${#cands[@]} -gt 0 ]; then
+  PY="${cands[0]}"
+  /usr/bin/osascript -e 'display notification "首次启动，正在安装组件（约半分钟）" with title "浮词"' >/dev/null 2>&1
+  "$PY" -m pip install --user -q pyobjc-framework-Cocoa certifi -i "$MIRROR" >>"$LOG" 2>&1 \
+    || "$PY" -m pip install --user -q pyobjc-framework-Cocoa certifi >>"$LOG" 2>&1 \
+    || "$PY" -m pip install --user -q --break-system-packages pyobjc-framework-Cocoa certifi -i "$MIRROR" >>"$LOG" 2>&1
+  if ! "$PY" -c "import AppKit, certifi" >/dev/null 2>&1; then
+    alert "浮词组件安装失败" "请检查网络后再打开一次。"
+    exit 1
+  fi
+fi
+if [ -z "$PY" ]; then
+  rm -f "$CACHE"
+  alert "浮词需要 Python" "将打开 Python 官网：下载 macOS 安装包，装好后再打开浮词。"
+  /usr/bin/open "https://www.python.org/downloads/macos/"
+  exit 1
+fi
+
+# 已经在运行（包括旧的桌面版）：先关掉，保证打开的是这个 app 里的最新版
+/usr/bin/pkill -f "wordfloat.py" >/dev/null 2>&1 && sleep 0.6
+echo "$PY" > "$CACHE"
+cd "$DATA"
+exec "$PY" "$RES/wordfloat.py" >>"$LOG" 2>&1
