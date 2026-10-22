@@ -1,0 +1,30 @@
+name: Release
+
+# 推送 v* 标签时：构建 浮词.app，打包 zip，发布到 Releases
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        id: build
+        run: |
+          chmod +x build.sh
+          echo "zip=$(./build.sh | tail -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" "${{ steps.build.outputs.zip }}" \
+            --title "浮词 $TAG" \
+            --notes-file .github/release-notes.md

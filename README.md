@@ -81,3 +81,12 @@ cd wordfloat
 ## 许可
 
 MIT。本地词典来自 [ECDICT](https://github.com/skywind3000/ECDICT)（MIT）。
+
+## 发布新版本
+
+1. 改 `macos/Info.plist` 里的 `CFBundleShortVersionString`。
+2. 提交后打标签并推送：
+   ```bash
+   git tag v1.1 && git push origin v1.1
+   ```
+GitHub Actions 会自动构建并发布到 Releases。
